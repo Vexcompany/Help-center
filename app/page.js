@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ArrowRight, CheckCircle2, Download, HelpCircle, ImagePlus, MessageCircle, ShieldCheck, Smartphone, Sparkles, X } from 'lucide-react';
 
 const problems = [
@@ -50,7 +50,17 @@ const THINKING_STATES = [
 
 function Chat({ onClose }) {
   const [messages, setMessages] = useState([{ role: 'assistant', content: 'Hai! Aku Ryuna 🌸 Apa yang terjadi saat kamu mencoba memakai Pagaska Music?' }]);
-  const [input, setInput] = useState(''); const [busy, setBusy] = useState(false); const [thinkingState, setThinkingState] = useState(0); const [file, setFile] = useState(null); const fileInputRef = useRef(null);
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [thinkingState, setThinkingState] = useState(0);
+  const [file, setFile] = useState(null);
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!busy) return undefined;
+    const timer = window.setInterval(() => setThinkingState((current) => (current + 1) % THINKING_STATES.length), 2600);
+    return () => window.clearInterval(timer);
+  }, [busy]);
 
   function chooseFile(e) {
     const selected = e.target.files?.[0];
@@ -61,20 +71,17 @@ function Chat({ onClose }) {
   }
 
   async function send(e) {
-    e.preventDefault(); const text = input.trim(); if ((!text && !file) || busy) return;
-    const userContent = file ? [{ type: 'text', text: text || 'Tolong bantu identifikasi masalah dari screenshot ini.' }, { type: 'image_url', image_url: { url: await toDataUrl(file) } }] : text;
-    const next = [...messages, { role: 'user', content: userContent, displayText: text || 'Mengirim screenshot untuk diperiksa.' }];
+    e.preventDefault();
+    const text = input.trim();
+    if ((!text && !file) || busy) return;
+    const currentFile = file;
+    const userContent = currentFile ? [{ type: 'text', text: text || 'Tolong bantu identifikasi masalah dari screenshot ini.' }, { type: 'image_url', image_url: { url: await toDataUrl(currentFile) } }] : text;
+    const next = [...messages, { role: 'user', content: userContent, displayText: text || `Screenshot: ${currentFile.name}` }];
     setMessages(next); setInput(''); setFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; setBusy(true); setThinkingState(0);
     try { const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: next.map(({ displayText, ...message }) => message) }) }); const data = await r.json(); setMessages([...next, { role: 'assistant', content: data.message || data.error || 'Maaf, Ryuna sedang tidak tersedia.' }]); } catch { setMessages([...next, { role: 'assistant', content: 'Maaf, koneksi bantuan sedang bermasalah. Coba lagi sebentar.' }]); } finally { setBusy(false); }
   }
 
   function toDataUrl(blob) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob); }); }
 
-  return <div className="chat-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}><section className="chat"><header><div><strong>🌸 Ryuna</strong><span>Pagaska Music Help Assistant</span></div><button onClick={onClose} aria-label="Tutup"><X/></button></header><div className="chat-body">{messages.map((m, i) => <div key={i} className={`bubble ${m.role}`}>{m.role === 'user' ? (m.displayText || (typeof m.content === 'string' ? m.content : 'Screenshot')) : m.content}</div>)}{busy && <div className="bubble assistant thinking"><span>{THINKING_STATES[thinkingState]}</span><i/><i/><i/></div>}</div><form onSubmit={send}><input ref={fileInputRef} className="file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={chooseFile}/><button type="button" className={`attach ${file ? 'selected' : ''}`} onClick={() => fileInputRef.current?.click()} title="Tambahkan screenshot" aria-label="Tambahkan screenshot"><ImagePlus size={18}/></button><div className="composer"><input value={input} onChange={(e) => setInput(e.target.value)} placeholder={file ? file.name : 'Contoh: Pagaska Music tidak bisa di-install'}/>{file && <button type="button" className="clear-file" onClick={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} aria-label="Hapus screenshot"><X size={14}/></button>}</div><button className="primary" disabled={busy}>Kirim</button></form></section></div>;
+  return <div className="chat-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}><section className="chat"><header><div><strong>🌸 Ryuna</strong><span>Pagaska Music Help Assistant</span></div><button onClick={onClose} aria-label="Tutup"><X/></button></header><div className="chat-body">{messages.map((m, i) => <div key={i} className={`bubble ${m.role}`}>{m.role === 'user' ? (m.displayText || (typeof m.content === 'string' ? m.content : 'Screenshot')) : m.content}</div>)}{busy && <div className="bubble assistant thinking"><span>{THINKING_STATES[thinkingState]}</span><span className="thinking-dots"><i/><i/><i/></span></div>}</div><form onSubmit={send}><input ref={fileInputRef} className="file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={chooseFile}/><button type="button" className={`attach ${file ? 'selected' : ''}`} onClick={() => fileInputRef.current?.click()} title="Tambahkan screenshot" aria-label="Tambahkan screenshot"><ImagePlus size={18}/></button><div className="composer"><input value={input} onChange={(e) => setInput(e.target.value)} placeholder={file ? file.name : 'Contoh: Pagaska Music tidak bisa di-install'}/>{file && <button type="button" className="clear-file" onClick={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} aria-label="Hapus screenshot"><X size={14}/></button>}</div><button className="primary" disabled={busy}>Kirim</button></form></section></div>;
 }
-
-if (typeof window !== 'undefined') {
-  // Keep the thinking animation local to the browser; the API remains the source of truth for the answer.
-}
-
-export { THINKING_STATES };
