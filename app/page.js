@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowRight, CheckCircle2, Download, HelpCircle, ImagePlus, MessageCircle, MessageSquarePlus, ShieldCheck, Smartphone, Sparkles, X } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, Download, HelpCircle, History, ImagePlus, MessageCircle, MessageSquarePlus, ShieldCheck, Smartphone, Sparkles, X } from 'lucide-react';
 
 const CHAT_STORAGE_KEY = 'pagaska_ryuna_chat_v1';
+const SESSIONS_STORAGE_KEY = 'pagaska_ryuna_sessions_v1';
 const DRAFT_STORAGE_KEY = 'pagaska_ryuna_draft_v1';
 const CHAT_OPEN_STORAGE_KEY = 'pagaska_ryuna_open_v1';
 const INITIAL_MESSAGE = { role: 'assistant', content: 'Hai! Aku Ryuna 🌸 Apa yang terjadi saat kamu mencoba memakai Pagaska Music?' };
@@ -21,16 +22,8 @@ export default function Home() {
   const [chatOpen, setChatOpen] = useState(false);
   const filtered = useMemo(() => problems.filter((p) => `${p.title} ${p.text}`.toLowerCase().includes(query.toLowerCase())), [query]);
 
-  useEffect(() => {
-    try {
-      setChatOpen(localStorage.getItem(CHAT_OPEN_STORAGE_KEY) === 'true');
-    } catch {}
-  }, []);
-
-  function toggleChat(open) {
-    setChatOpen(open);
-    try { localStorage.setItem(CHAT_OPEN_STORAGE_KEY, String(open)); } catch {}
-  }
+  useEffect(() => { try { setChatOpen(localStorage.getItem(CHAT_OPEN_STORAGE_KEY) === 'true'); } catch {} }, []);
+  function toggleChat(open) { setChatOpen(open); try { localStorage.setItem(CHAT_OPEN_STORAGE_KEY, String(open)); } catch {} }
 
   return (
     <main>
@@ -56,52 +49,66 @@ function Guide({ id }) {
   return <article className="guide"><div className="guide-label">Ryuna menyarankan</div><h3>{guide.title}</h3><p>{guide.intro}</p><ol>{guide.steps.map((s, i) => <li key={i}>{s}</li>)}</ol></article>;
 }
 
-const THINKING_STATES = [
-  'Ryuna sedang berpikir…',
-  'Menyiapkan jawaban yang relevan…',
-  'Mencocokkan dengan panduan Pagaska Music…',
-  'Merangkai jawaban…',
-  'Hampir selesai…',
-];
+const THINKING_STATES = ['Ryuna sedang berpikir…', 'Menyiapkan jawaban yang relevan…', 'Mencocokkan dengan panduan Pagaska Music…', 'Merangkai jawaban…', 'Hampir selesai…'];
+
+function createSession(messages = [INITIAL_MESSAGE]) {
+  return { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title: 'Percakapan baru', messages, updatedAt: Date.now() };
+}
+
+function sessionTitle(messages) {
+  const firstUser = messages.find((message) => message.role === 'user');
+  if (!firstUser) return 'Percakapan baru';
+  const text = typeof firstUser.content === 'string' ? firstUser.content : firstUser.displayText || 'Screenshot';
+  return text.replace(/\s+/g, ' ').trim().slice(0, 48) || 'Percakapan baru';
+}
 
 function Chat({ onClose }) {
   const [messages, setMessages] = useState([INITIAL_MESSAGE]);
+  const [sessions, setSessions] = useState([]);
+  const [activeSessionId, setActiveSessionId] = useState(null);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [thinkingState, setThinkingState] = useState(0);
   const [file, setFile] = useState(null);
+  const [showHistory, setShowHistory] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const fileInputRef = useRef(null);
   const hydratedRef = useRef(false);
 
   useEffect(() => {
     try {
-      const savedMessages = JSON.parse(localStorage.getItem(CHAT_STORAGE_KEY) || 'null');
-      if (Array.isArray(savedMessages) && savedMessages.length) setMessages(savedMessages);
+      const savedSessions = JSON.parse(localStorage.getItem(SESSIONS_STORAGE_KEY) || 'null');
+      if (Array.isArray(savedSessions) && savedSessions.length) {
+        const normalized = savedSessions.filter((session) => Array.isArray(session.messages));
+        const active = normalized[0];
+        setSessions(normalized); setActiveSessionId(active.id); setMessages(active.messages.length ? active.messages : [INITIAL_MESSAGE]);
+      } else {
+        const legacy = JSON.parse(localStorage.getItem(CHAT_STORAGE_KEY) || 'null');
+        const initial = createSession(Array.isArray(legacy) && legacy.length ? legacy : [INITIAL_MESSAGE]);
+        setSessions([initial]); setActiveSessionId(initial.id); setMessages(initial.messages);
+      }
       const savedDraft = localStorage.getItem(DRAFT_STORAGE_KEY);
       if (savedDraft) setInput(savedDraft);
-    } catch {}
-    hydratedRef.current = true;
-    setHydrated(true);
+    } catch {
+      const initial = createSession(); setSessions([initial]); setActiveSessionId(initial.id); setMessages(initial.messages);
+    }
+    hydratedRef.current = true; setHydrated(true);
   }, []);
 
   useEffect(() => {
-    if (!hydratedRef.current) return;
-    try {
-      const safeMessages = messages.map((message) => ({
-        role: message.role,
-        content: typeof message.content === 'string' ? message.content : (message.displayText || 'Screenshot terlampir.'),
-      }));
-      localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(safeMessages));
-    } catch {}
-  }, [messages]);
+    if (!hydratedRef.current || !activeSessionId) return;
+    const safeMessages = messages.map((message) => ({ role: message.role, content: typeof message.content === 'string' ? message.content : (message.displayText || 'Screenshot terlampir.'), ...(message.displayText ? { displayText: message.displayText } : {}) }));
+    setSessions((current) => current.map((session) => session.id === activeSessionId ? { ...session, messages: safeMessages, title: sessionTitle(safeMessages), updatedAt: Date.now() } : session));
+  }, [messages, activeSessionId]);
 
   useEffect(() => {
     if (!hydratedRef.current) return;
-    try {
-      if (input) localStorage.setItem(DRAFT_STORAGE_KEY, input);
-      else localStorage.removeItem(DRAFT_STORAGE_KEY);
-    } catch {}
+    try { localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions.slice(0, 30))); } catch {}
+  }, [sessions]);
+
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    try { if (input) localStorage.setItem(DRAFT_STORAGE_KEY, input); else localStorage.removeItem(DRAFT_STORAGE_KEY); } catch {}
   }, [input]);
 
   useEffect(() => {
@@ -126,19 +133,50 @@ function Chat({ onClose }) {
     const userContent = currentFile ? [{ type: 'text', text: text || 'Tolong bantu identifikasi masalah dari screenshot ini.' }, { type: 'image_url', image_url: { url: await toDataUrl(currentFile) } }] : text;
     const next = [...messages, { role: 'user', content: userContent, displayText: text || `Screenshot: ${currentFile.name}` }];
     setMessages(next); setInput(''); setFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; setBusy(true); setThinkingState(0);
-    try { const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: next.map(({ displayText, ...message }) => message) }) }); const data = await r.json(); setMessages([...next, { role: 'assistant', content: data.message || data.error || 'Maaf, Ryuna sedang tidak tersedia.' }]); } catch { setMessages([...next, { role: 'assistant', content: 'Maaf, koneksi bantuan sedang bermasalah. Coba lagi sebentar.' }]); } finally { setBusy(false); }
+    try {
+      const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: next.map(({ displayText, ...message }) => message) }) });
+      const data = await r.json();
+      setMessages([...next, { role: 'assistant', content: (data.message || data.error || 'Maaf, Ryuna sedang tidak tersedia.').trim() }]);
+    } catch { setMessages([...next, { role: 'assistant', content: 'Maaf, koneksi bantuan sedang bermasalah. Coba lagi sebentar.' }]); }
+    finally { setBusy(false); }
   }
 
   function newConversation() {
     if (busy) return;
-    setMessages([INITIAL_MESSAGE]);
-    setInput('');
-    setFile(null);
+    const nextSession = createSession();
+    setSessions((current) => [
+      { ...(current.find((session) => session.id === activeSessionId) || {}), id: activeSessionId, messages, title: sessionTitle(messages), updatedAt: Date.now() },
+      ...current.filter((session) => session.id !== activeSessionId && session.id !== nextSession.id),
+    ].filter((session) => session.id).slice(0, 30));
+    setSessions((current) => [nextSession, ...current.filter((session) => session.id !== nextSession.id)].slice(0, 30));
+    setActiveSessionId(nextSession.id); setMessages(nextSession.messages); setInput(''); setFile(null); setShowHistory(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
-    try { localStorage.removeItem(CHAT_STORAGE_KEY); localStorage.removeItem(DRAFT_STORAGE_KEY); } catch {}
+    try { localStorage.removeItem(DRAFT_STORAGE_KEY); } catch {}
+  }
+
+  function openSession(session) {
+    if (busy) return;
+    setActiveSessionId(session.id); setMessages(session.messages?.length ? session.messages : [INITIAL_MESSAGE]); setInput(''); setFile(null); setShowHistory(false);
+    try { localStorage.removeItem(DRAFT_STORAGE_KEY); } catch {}
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  function deleteSession(sessionId) {
+    if (busy) return;
+    setSessions((current) => {
+      const remaining = current.filter((session) => session.id !== sessionId);
+      if (!remaining.length) { const fresh = createSession(); setActiveSessionId(fresh.id); setMessages(fresh.messages); return [fresh]; }
+      if (sessionId === activeSessionId) { setActiveSessionId(remaining[0].id); setMessages(remaining[0].messages?.length ? remaining[0].messages : [INITIAL_MESSAGE]); }
+      return remaining;
+    });
   }
 
   function toDataUrl(blob) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob); }); }
 
-  return <div className="chat-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}><section className="chat"><header><div><strong>🌸 Ryuna</strong><span>Pagaska Music Help Assistant</span></div><div className="chat-header-actions"><button type="button" className="new-chat" onClick={newConversation} disabled={busy} title="Percakapan baru" aria-label="Percakapan baru"><MessageSquarePlus size={20}/></button><button onClick={onClose} aria-label="Tutup"><X/></button></div></header><div className="chat-body">{messages.map((m, i) => <div key={i} className={`bubble ${m.role}`}>{m.role === 'user' ? (m.displayText || (typeof m.content === 'string' ? m.content : 'Screenshot')) : m.content}</div>)}{busy && <div className="bubble assistant thinking"><span>{THINKING_STATES[thinkingState]}</span><span className="thinking-dots"><i/><i/><i/></span></div>}</div><form onSubmit={send}><input ref={fileInputRef} className="file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={chooseFile}/><button type="button" className={`attach ${file ? 'selected' : ''}`} onClick={() => fileInputRef.current?.click()} title="Tambahkan screenshot" aria-label="Tambahkan screenshot"><ImagePlus size={18}/></button><div className="composer"><input value={input} onChange={(e) => setInput(e.target.value)} placeholder={file ? file.name : 'Contoh: Pagaska Music tidak bisa di-install'}/>{file && <button type="button" className="clear-file" onClick={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} aria-label="Hapus screenshot"><X size={14}/></button>}</div><button className="primary" disabled={busy}>Kirim</button></form></section></div>;
+  return <div className="chat-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}><section className="chat">
+    <header><div><strong>🌸 Ryuna</strong><span>Pagaska Music Help Assistant</span></div><div className="chat-header-actions"><button type="button" className="icon-button" onClick={() => setShowHistory((current) => !current)} disabled={busy} title="Riwayat percakapan" aria-label="Riwayat percakapan"><History size={18}/></button><button type="button" className="icon-button" onClick={newConversation} disabled={busy} title="Percakapan baru" aria-label="Percakapan baru"><MessageSquarePlus size={18}/></button><button type="button" className="icon-button" onClick={onClose} aria-label="Tutup" title="Tutup"><X size={18}/></button></div></header>
+    {showHistory && <div className="history-panel"><div className="history-head"><strong>Riwayat percakapan</strong><span>{sessions.length} percakapan</span></div><div className="history-list">{sessions.map((session) => <div key={session.id} className={`history-item ${session.id === activeSessionId ? 'active' : ''}`}><button type="button" onClick={() => openSession(session)}><strong>{session.title}</strong><span>{new Date(session.updatedAt).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span></button><button type="button" className="history-delete" onClick={() => deleteSession(session.id)} disabled={busy} aria-label={`Hapus ${session.title}`} title="Hapus riwayat"><X size={14}/></button></div>)}</div></div>}
+    <div className="chat-body">{messages.map((m, i) => <div key={i} className={`bubble ${m.role}`}>{m.role === 'user' ? (m.displayText || (typeof m.content === 'string' ? m.content : 'Screenshot')) : m.content}</div>)}{busy && <div className="bubble assistant thinking"><span>{THINKING_STATES[thinkingState]}</span><span className="thinking-dots"><i/><i/><i/></span></div>}</div>
+    <form onSubmit={send}><input ref={fileInputRef} className="file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={chooseFile}/><button type="button" className={`attach ${file ? 'selected' : ''}`} onClick={() => fileInputRef.current?.click()} title="Tambahkan screenshot" aria-label="Tambahkan screenshot"><ImagePlus size={18}/></button><div className="composer"><input value={input} onChange={(e) => setInput(e.target.value)} placeholder={file ? file.name : 'Contoh: Pagaska Music tidak bisa di-install'}/>{file && <button type="button" className="clear-file" onClick={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} aria-label="Hapus screenshot"><X size={14}/></button>}</div><button className="primary" disabled={busy}>Kirim</button></form>
+  </section></div>;
 }
