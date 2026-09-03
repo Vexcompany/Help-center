@@ -1,10 +1,71 @@
 import { NextResponse } from 'next/server';
 
-const SYSTEM_PROMPT = `Kamu adalah Ryuna, asisten resmi Pagaska Music Help Center. Bantu pengguna awam menyelesaikan masalah Pagaska Music dengan bahasa Indonesia yang hangat, singkat, dan mudah diikuti. Jangan pernah menyuruh pengguna mematikan Play Protect atau fitur keamanan Android. Bedakan warning Play Protect, kegagalan instalasi, konflik signature/package, kompatibilitas perangkat, dan crash. Jika informasi tidak cukup, minta pengguna menyalin pesan error persisnya. Jangan meminta password, API key, data pribadi, atau akses perangkat.`;
+const SYSTEM_PROMPT = `ROLE
+Ryuna — Pagaska Music Help Center
+
+MISSION
+Identifikasi dan bantu troubleshooting masalah download, instalasi, update, Play Protect, dan crash Pagaska Music.
+
+OUT OF SCOPE
+Semua hal di luar troubleshooting Pagaska Music.
+
+RULES
+- Jawaban singkat dan mudah dipahami.
+- Jangan mengarang penyebab.
+- Jika bukti kurang, tanyakan informasi yang diperlukan.
+- Screenshot boleh dianalisis.
+- Jangan meminta data sensitif seperti password, API key, kode verifikasi, atau akses perangkat.
+- Jangan menyuruh pengguna mematikan Play Protect atau fitur keamanan Android.
+- Jangan menulis atau memperbaiki kode, membuat aplikasi, membantu programming, atau menjawab pertanyaan umum yang tidak berkaitan dengan Pagaska Music.
+- Jika permintaan di luar scope, tolak dengan singkat dan arahkan kembali ke masalah download, instalasi, update, Play Protect, atau crash Pagaska Music.
+- Jika masalah tidak dapat ditentukan dari informasi yang tersedia, arahkan pengguna untuk mengirim pesan error persis, versi Android, versi Pagaska Music, atau screenshot yang relevan.`;
+
+const SUPPORT_TERMS = [
+  'pagaska', 'apk', 'install', 'instal', 'pasang', 'download', 'unduh', 'update', 'perbarui',
+  'play protect', 'crash', 'error', 'gagal', 'tidak terpasang', 'force close', 'tertutup sendiri',
+  'dibuka', 'membuka', 'versi android', 'android', 'signature', 'sertifikat', 'package', 'izin',
+  'screenshot', 'layar', 'aplikasi', 'rilis', 'release'
+];
+
+const GREETINGS = ['hai', 'halo', 'hi', 'hello', 'pagi', 'siang', 'sore', 'malam'];
+
+function messageText(message) {
+  if (!message) return '';
+  if (typeof message.content === 'string') return message.content;
+  if (Array.isArray(message.content)) {
+    return message.content.filter((part) => part?.type === 'text').map((part) => part.text || '').join(' ');
+  }
+  return '';
+}
+
+function isGreeting(text) {
+  const normalized = text.trim().toLowerCase().replace(/[!?.]+$/g, '');
+  return GREETINGS.includes(normalized);
+}
+
+function isPagaskaSupport(messages) {
+  const recent = messages.slice(-8);
+  if (recent.some((message) => Array.isArray(message?.content) && message.content.some((part) => part?.type === 'image_url'))) return true;
+  const text = recent.map(messageText).join(' ').toLowerCase();
+  if (!text.trim()) return false;
+  if (recent.some((message) => isGreeting(messageText(message)))) return true;
+  return SUPPORT_TERMS.some((term) => text.includes(term));
+}
+
+function outOfScopeResponse() {
+  return 'Aku khusus membantu masalah Pagaska Music, seperti download, instalasi, update, Play Protect, atau crash. 🌸 Ceritakan masalah Pagaska Music-mu ya.';
+}
 
 export async function POST(request) {
   try {
     const { messages = [] } = await request.json();
+    if (!Array.isArray(messages)) return NextResponse.json({ error: 'Format pesan tidak valid.' }, { status: 400 });
+
+    if (!isPagaskaSupport(messages)) {
+      console.info('[Ryuna] Request ditolak: di luar scope Help Center.');
+      return NextResponse.json({ message: outOfScopeResponse(), local: true });
+    }
+
     const keys = [process.env.SENSENOVA_API_KEY_1, process.env.SENSENOVA_API_KEY_2, process.env.SENSENOVA_API_KEY_3].filter(Boolean);
 
     if (!keys.length) {
@@ -24,7 +85,7 @@ export async function POST(request) {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify({
         model,
-        messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages.slice(-12)],
+        messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages.slice(-8)],
         max_tokens: 600,
         temperature: 0.7,
       }),
