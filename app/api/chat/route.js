@@ -106,7 +106,8 @@ export async function POST(request) {
       return NextResponse.json({ error: `Ryuna gagal terhubung ke layanan AI (kode ${response.status}).` }, { status: response.status });
     }
 
-    const answer = data?.choices?.[0]?.message?.content || data?.data?.choices?.[0]?.message?.content || 'Maaf, Ryuna belum mendapat jawaban dari server.';
+    const rawAnswer = data?.choices?.[0]?.message?.content || data?.data?.choices?.[0]?.message?.content || 'Maaf, Ryuna belum mendapat jawaban dari server.';
+    const answer = typeof rawAnswer === 'string' ? rawAnswer.trim() : rawAnswer;
     return NextResponse.json({ message: answer });
   } catch (error) {
     console.error('[Ryuna] Server error:', error);
