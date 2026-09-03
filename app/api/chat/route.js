@@ -14,7 +14,7 @@ export async function POST(request) {
 
     const keyIndex = Date.now() % keys.length;
     const key = keys[keyIndex];
-    const url = process.env.SENSENOVA_API_URL || 'https://token.sensenova.cn/v1/chat/completions';
+    const url = process.env.SENSENOVA_API_URL || 'https://token.sensenova.ai/v1/chat/completions';
     const model = process.env.SENSENOVA_MODEL || 'sensenova-6.8-flash-lite';
 
     console.info(`[Ryuna] Request → model=${model}, keySlot=${keyIndex + 1}`);
