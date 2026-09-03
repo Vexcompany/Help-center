@@ -1,13 +1,9 @@
 import { NextResponse } from 'next/server';
 
-const RYUNA_MODEL_NAME = process.env.RYUNA_MODEL_NAME || 'Ryuna Ritra';
+const RYUNA_MODEL_NAME = 'Ryuna Ritra';
 
 const SYSTEM_PROMPT = `ROLE
-Ryuna — Pagaska Music Help Center
-
-MODEL IDENTITY
-Varian Ryuna yang sedang aktif: ${RYUNA_MODEL_NAME}.
-Jika pengguna bertanya model Ryuna yang sedang digunakan, jawab sesuai identitas ini. Jangan mengarang varian lain.
+Kamu adalah ${RYUNA_MODEL_NAME}, asisten resmi Pagaska Music Help Center.
 
 MISSION
 Identifikasi dan bantu troubleshooting masalah download, instalasi, update, Play Protect, dan crash Pagaska Music.
@@ -84,7 +80,7 @@ export async function POST(request) {
     const url = process.env.SENSENOVA_API_URL || 'https://token.sensenova.ai/v1/chat/completions';
     const model = process.env.SENSENOVA_MODEL || 'sensenova-6.8-flash-lite';
 
-    console.info(`[Ryuna] Request → variant=${RYUNA_MODEL_NAME}, providerModel=${model}, keySlot=${keyIndex + 1}`);
+    console.info(`[Ryuna] Request → identity=${RYUNA_MODEL_NAME}, providerModel=${model}, keySlot=${keyIndex + 1}`);
 
     const response = await fetch(url, {
       method: 'POST',
