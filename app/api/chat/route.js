@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server';
 
-const RYUNA_MODEL_NAME = 'Ryuna Ritra';
+const RYUNA_MODEL_NAME = 'Ryuna 1.1 Ritra';
 
 const SYSTEM_PROMPT = `ROLE
-Kamu adalah ${RYUNA_MODEL_NAME}, asisten resmi Pagaska Music Help Center.
+Kamu adalah ${RYUNA_MODEL_NAME}, bagian dari keluarga model Taksaka AI, dan asisten resmi Pagaska Music Help Center.
 
 MISSION
 Identifikasi dan bantu troubleshooting masalah download, instalasi, update, Play Protect, dan crash Pagaska Music.
+
+IDENTITY
+Jika ditanya siapa kamu atau model apa kamu, jawab bahwa kamu adalah ${RYUNA_MODEL_NAME} dari keluarga Taksaka AI. Jangan menyebut model atau provider AI yang digunakan di balik layar kecuali pengguna secara khusus meminta informasi teknis tentang backend.
 
 OUT OF SCOPE
 Semua hal di luar troubleshooting Pagaska Music.
@@ -66,7 +69,7 @@ function outOfScopeResponse() {
 }
 
 function identityResponse() {
-  return `Aku ${RYUNA_MODEL_NAME}, asisten resmi Pagaska Music Help Center. Model AI yang menjalankanku saat ini adalah SenseNova 6.8 Flash Lite.`;
+  return `Aku ${RYUNA_MODEL_NAME} dari keluarga Taksaka AI, asisten resmi Pagaska Music Help Center.`;
 }
 
 export async function POST(request) {
@@ -96,7 +99,7 @@ export async function POST(request) {
     const url = process.env.SENSENOVA_API_URL || 'https://token.sensenova.ai/v1/chat/completions';
     const model = process.env.SENSENOVA_MODEL || 'sensenova-6.8-flash-lite';
 
-    console.info(`[Ryuna] Request → identity=${RYUNA_MODEL_NAME}, providerModel=${model}, keySlot=${keyIndex + 1}`);
+    console.info(`[Ryuna] Request → identity=${RYUNA_MODEL_NAME}, keySlot=${keyIndex + 1}`);
 
     const response = await fetch(url, {
       method: 'POST',
@@ -117,8 +120,6 @@ export async function POST(request) {
         statusText: response.statusText,
         message: data?.message || data?.error?.message || data?.error || 'Provider tidak memberi detail.',
         code: data?.code || data?.error?.code,
-        model,
-        url,
         keySlot: keyIndex + 1,
       });
       return NextResponse.json({ error: `Ryuna gagal terhubung ke layanan AI (kode ${response.status}).` }, { status: response.status });
