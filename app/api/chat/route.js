@@ -30,6 +30,7 @@ const SUPPORT_TERMS = [
 ];
 
 const GREETINGS = ['hai', 'halo', 'hi', 'hello', 'pagi', 'siang', 'sore', 'malam'];
+const IDENTITY_TERMS = ['model apa', 'kamu siapa', 'siapa kamu', 'nama kamu', 'nama model', 'modelmu', 'model mu', 'ryuna siapa'];
 
 function messageText(message) {
   if (!message) return '';
@@ -45,6 +46,12 @@ function isGreeting(text) {
   return GREETINGS.includes(normalized);
 }
 
+function isIdentityQuestion(messages) {
+  const recent = messages.slice(-2);
+  const text = recent.map(messageText).join(' ').toLowerCase().trim();
+  return IDENTITY_TERMS.some((term) => text.includes(term));
+}
+
 function isPagaskaSupport(messages) {
   const recent = messages.slice(-8);
   if (recent.some((message) => Array.isArray(message?.content) && message.content.some((part) => part?.type === 'image_url'))) return true;
@@ -58,10 +65,19 @@ function outOfScopeResponse() {
   return 'Aku khusus membantu masalah Pagaska Music, seperti download, instalasi, update, Play Protect, atau crash. Ceritakan masalah Pagaska Music-mu ya.';
 }
 
+function identityResponse() {
+  return `Aku ${RYUNA_MODEL_NAME}, asisten resmi Pagaska Music Help Center. Model AI yang menjalankanku saat ini adalah SenseNova 6.8 Flash Lite.`;
+}
+
 export async function POST(request) {
   try {
     const { messages = [] } = await request.json();
     if (!Array.isArray(messages)) return NextResponse.json({ error: 'Format pesan tidak valid.' }, { status: 400 });
+
+    if (isIdentityQuestion(messages)) {
+      console.info(`[Ryuna] Identity response → ${RYUNA_MODEL_NAME}`);
+      return NextResponse.json({ message: identityResponse(), local: true });
+    }
 
     if (!isPagaskaSupport(messages)) {
       console.info('[Ryuna] Request ditolak: di luar scope Help Center.');
