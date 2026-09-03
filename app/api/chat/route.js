@@ -10,14 +10,14 @@ export async function POST(request) {
 
     // Rotate keys server-side so API credentials never reach the browser.
     const key = keys[Date.now() % keys.length];
-    const response = await fetch(process.env.SENSENOVA_API_URL || 'https://api.sensenova.cn/compatible-mode/v1/chat/completions', {
+    const response = await fetch(process.env.SENSENOVA_API_URL || 'https://token.sensenova.cn/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify({
-        model: process.env.SENSENOVA_MODEL || 'SenseNova-V6-Pro',
+        model: process.env.SENSENOVA_MODEL || 'sensenova-6.8-flash-lite',
         messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages.slice(-12)],
         max_tokens: 600,
-        temperature: 0.4,
+        temperature: 0.7,
       }),
     });
 
